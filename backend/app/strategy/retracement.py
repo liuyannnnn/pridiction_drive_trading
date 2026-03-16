@@ -12,6 +12,10 @@ class RetracementStrategy:
         self._peak_bid: dict[str, float] = {}
         self._has_position: dict[str, bool] = {}
 
+    @property
+    def strategy_id(self) -> str:
+        return self._strategy_id
+
     def on_tick(self, tick: MarketTickEvent) -> TradeSignal | None:
         match_id = tick.match_id
         peak = self._peak_bid.get(match_id, tick.bid)

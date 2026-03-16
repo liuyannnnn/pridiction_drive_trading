@@ -46,8 +46,8 @@ export const MatchDetail = () => {
       try {
         const [ticks, trades, logs, goalserve] = await Promise.all([
           fetchTicks(selectedMatchId),
-          fetchTrades(),
-          fetchLogs(200),
+          fetchTrades({ matchId: selectedMatchId, limit: 200 }),
+          fetchLogs({ matchId: selectedMatchId, limit: 200 }),
           fetchGoalserveMatchDetail(selectedMatchId),
         ]);
         if (disposed) {

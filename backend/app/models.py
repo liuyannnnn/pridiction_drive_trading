@@ -25,3 +25,9 @@ class MatchCard(BaseModel):
     moneyline_volume: float
     total_volume: float
     latest_ts_utc: datetime
+    score_home: int | None = None
+    score_away: int | None = None
+    external_event_id: str = ""
+    external_event_slug: str = ""
+    external_market_id: str = ""
+    external_market_slug: str = ""

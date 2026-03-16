@@ -15,20 +15,8 @@ export const Sidebar = () => {
   
   // Settings State with volume thresholds and collection interval
   const [settings, setSettings] = useState({
-    football: true,
-    basketball: true,
-    tennis: true,
-    nba: true,
-    ncaa: true,
-    premierLeague: true,
-    laLiga: true,
     footballVol: 50,
     basketballVol: 100,
-    tennisVol: 30,
-    nbaVol: 120,
-    ncaaVol: 80,
-    premierLeagueVol: 60,
-    laLigaVol: 55,
     collectionInterval: 15
   });
 
@@ -44,13 +32,16 @@ export const Sidebar = () => {
   const sourceList = showHistory ? HISTORY_MATCHES : matches;
 
   const filteredMatches = sourceList.filter(match => {
+    const isSupportedSport = match.sport === 'Football' || match.sport === 'Basketball';
+    if (!isSupportedSport) {
+      return false;
+    }
     const matchesSearch = match.teamA.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           match.teamB.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSport = selectedSport === 'All' || match.sport === selectedSport;
     const passVolume =
       (match.sport === 'Football' && match.volume >= settings.footballVol * 1000) ||
-      (match.sport === 'Basketball' && match.volume >= settings.basketballVol * 1000) ||
-      (match.sport !== 'Football' && match.sport !== 'Basketball');
+      (match.sport === 'Basketball' && match.volume >= settings.basketballVol * 1000);
     return matchesSearch && matchesSport && passVolume;
   });
 
@@ -126,7 +117,7 @@ export const Sidebar = () => {
             <div>
               <label className="text-[10px] text-gray-500 block mb-2">体育项目</label>
               <div className="flex flex-wrap gap-2">
-                {['All', 'Football', 'Basketball', 'Tennis'].map(sport => (
+                {['All', 'Football', 'Basketball'].map(sport => (
                   <button
                     key={sport}
                     onClick={() => setSelectedSport(sport)}
@@ -137,7 +128,7 @@ export const Sidebar = () => {
                         : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
                     )}
                   >
-                    {sport === 'All' ? '全部' : sport === 'Football' ? '足球' : sport === 'Basketball' ? '篮球' : '网球'}
+                    {sport === 'All' ? '全部' : sport === 'Football' ? '足球' : '篮球'}
                   </button>
                 ))}
               </div>
@@ -172,15 +163,7 @@ export const Sidebar = () => {
             {/* Football */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.football}
-                    onChange={(e) => setSettings({...settings, football: e.target.checked})}
-                    className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white"
-                  />
-                  <span className="text-sm text-gray-800 font-medium">足球</span>
-                </label>
+                <span className="text-sm text-gray-800 font-medium">足球</span>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-500">Vol $</span>
                   <input 
@@ -191,77 +174,17 @@ export const Sidebar = () => {
                   <span className="text-xs text-gray-500">K</span>
                 </div>
               </div>
-              <div className="pl-6 space-y-2 border-l border-gray-200 ml-2">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={settings.premierLeague} onChange={(e) => setSettings({...settings, premierLeague: e.target.checked})} className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white w-3 h-3" />
-                    <span className="text-xs text-gray-600">英超</span>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={settings.laLiga} onChange={(e) => setSettings({...settings, laLiga: e.target.checked})} className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white w-3 h-3" />
-                    <span className="text-xs text-gray-600">西甲</span>
-                  </label>
-                </div>
-              </div>
             </div>
 
             {/* Basketball */}
             <div className="pt-3 border-t border-gray-200">
               <div className="flex items-center justify-between mb-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.basketball}
-                    onChange={(e) => setSettings({...settings, basketball: e.target.checked})}
-                    className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white"
-                  />
-                  <span className="text-sm text-gray-800 font-medium">篮球</span>
-                </label>
+                <span className="text-sm text-gray-800 font-medium">篮球</span>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-500">Vol $</span>
                   <input 
                     type="number" min="0" value={settings.basketballVol}
                     onChange={(e) => setSettings({...settings, basketballVol: parseInt(e.target.value) || 0})}
-                    className="w-18 bg-gray-50 border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-900 focus:outline-none focus:border-[#10b981]"
-                  />
-                  <span className="text-xs text-gray-500">K</span>
-                </div>
-              </div>
-              <div className="pl-6 space-y-2 border-l border-gray-200 ml-2">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={settings.nba} onChange={(e) => setSettings({...settings, nba: e.target.checked})} className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white w-3 h-3" />
-                    <span className="text-xs text-gray-600">NBA</span>
-                  </label>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={settings.ncaa} onChange={(e) => setSettings({...settings, ncaa: e.target.checked})} className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white w-3 h-3" />
-                    <span className="text-xs text-gray-600">NCAA</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Tennis */}
-            <div className="pt-3 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.tennis}
-                    onChange={(e) => setSettings({...settings, tennis: e.target.checked})}
-                    className="rounded border-gray-300 text-[#10b981] focus:ring-[#10b981] bg-white"
-                  />
-                  <span className="text-sm text-gray-800 font-medium">网球</span>
-                </label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">Vol $</span>
-                  <input 
-                    type="number" min="0" value={settings.tennisVol}
-                    onChange={(e) => setSettings({...settings, tennisVol: parseInt(e.target.value) || 0})}
                     className="w-18 bg-gray-50 border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-900 focus:outline-none focus:border-[#10b981]"
                   />
                   <span className="text-xs text-gray-500">K</span>

@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTrading } from '../context/TradingContext';
 import { Play, Pause, X, Plus, Trash2, ChevronDown, Wallet, TrendingUp, DollarSign, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { fetchAccounts, fetchPositions, fetchTrades } from '../api/client';
+import { createTrading, deleteTradingInstance, fetchAccounts, fetchPositions, fetchTrades, startTradingInstance, stopTradingInstance, updateTradingInstance } from '../api/client';
 import { mapBackendAccountToTradingAccount } from '../api/trading-mappers';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -19,7 +19,9 @@ interface PMBuilderAccount {
 interface TradingAccount {
   id: string;
   mode: 'real' | 'simulation';
+  strategyKey: string;
   strategyName: string;
+  strategyConfig: Record<string, number>;
   strategyParams: { retracement: number };
   initialBalance: number;
   sports: string[];
@@ -98,6 +100,13 @@ const fmt = (n: number) =>
 const fmtK = (n: number) =>
   n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toFixed(0);
 
+const SPORT_OPTIONS = ['足球', '篮球'];
+
+const STRATEGY_OPTIONS = [
+  { value: 'prematch_gap_retracement', label: '开赛前价差回撤' },
+  { value: 'live_first_goal_retracement', label: '足球首球回撤' },
+];
+
 // ─── Shared Risk Params Section ────────────────────────────────────────────
 interface RiskParamsProps {
   maxPositions: string;
@@ -156,25 +165,29 @@ const RiskParamsSection = ({ maxPositions, maxFundUsageRate, maxSingleAmount, on
 
 // ─── Component ─────────────────────────────────────────────────────────────
 export const TradingPanel = () => {
-  const { isSimulation, setSimulationMode, tradeLogs } = useTrading();
+  const { isSimulation, setSimulationMode } = useTrading();
 
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [positionRows, setPositionRows] = useState<any[]>([]);
   const [tradeRows, setTradeRows] = useState<any[]>([]);
 
+  const loadTradingData = useCallback(async () => {
+    const [accountsData, positionsData, tradesData] = await Promise.all([
+      fetchAccounts(),
+      fetchPositions(),
+      fetchTrades(),
+    ]);
+    setAccounts(accountsData.map((row) => mapBackendAccountToTradingAccount(row)));
+    setPositionRows(positionsData);
+    setTradeRows(tradesData);
+  }, []);
+
   useEffect(() => {
     let disposed = false;
     const load = async () => {
       try {
-        const [accountsData, positionsData, tradesData] = await Promise.all([
-          fetchAccounts(),
-          fetchPositions(),
-          fetchTrades(),
-        ]);
+        await loadTradingData();
         if (disposed) return;
-        setAccounts(accountsData.map((row: any) => mapBackendAccountToTradingAccount(row)));
-        setPositionRows(positionsData);
-        setTradeRows(tradesData);
       } catch {
         if (!disposed) {
           setAccounts([]);
@@ -191,7 +204,7 @@ export const TradingPanel = () => {
       disposed = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [loadTradingData]);
 
   // ── Dialog visibility ──
   const [showAddDialog, setShowAddDialog]       = useState(false);
@@ -209,9 +222,9 @@ export const TradingPanel = () => {
 
   // ── Add form ──
   const defaultAddForm = {
-    strategy: '首分买入，回撤卖出',
+    strategy: STRATEGY_OPTIONS[0].value,
     retracement: '2',
-    initialBalance: '100000',
+    initialBalance: '10000',
     sports: ['足球', '篮球'] as string[],
     pmAccountId: '',
     maxPositions: '0',
@@ -265,67 +278,74 @@ export const TradingPanel = () => {
   );
 
   // ── Handlers ──
-  const handleAddAccount = () => {
-    const newId = isSimulation
-      ? `S${String(accounts.filter(a => a.mode === 'simulation').length + 1).padStart(3, '0')}`
-      : `R${String(accounts.filter(a => a.mode === 'real').length + 1).padStart(3, '0')}`;
-
-    const pmAcc = PM_BUILDER_ACCOUNTS.find(p => p.id === addForm.pmAccountId);
-    const initBal = isSimulation ? parseFloat(addForm.initialBalance) : (pmAcc?.totalFunds ?? 0);
-
-    const newAccount: TradingAccount = {
-      id: newId,
-      mode: isSimulation ? 'simulation' : 'real',
-      strategyName: addForm.strategy,
-      strategyParams: { retracement: parseFloat(addForm.retracement) },
-      initialBalance: initBal,
-      sports: addForm.sports,
-      totalAssets: initBal,
-      availableCash: isSimulation ? initBal : (pmAcc?.availableFunds ?? 0),
-      marketValue: isSimulation ? initBal : (pmAcc?.positionFunds ?? 0),
-      todayProfit: 0,
-      totalProfit: 0,
-      winRate: 0,
-      isRunning: true,
-      positionCount: 0,
-      pmAccountId: isSimulation ? undefined : addForm.pmAccountId,
-      maxPositions: parseInt(addForm.maxPositions) || 0,
-      maxFundUsageRate: parseFloat(addForm.maxFundUsageRate) || 0,
-      maxSingleAmount: parseFloat(addForm.maxSingleAmount) || 0,
+  const handleAddAccount = async () => {
+    if (!isSimulation) {
+      return;
+    }
+    const retracement = (parseFloat(addForm.retracement) || 0) / 100;
+    const initialBalance = parseFloat(addForm.initialBalance) || 10000;
+    const affectSports = addForm.sports
+      .map((sport) => (sport === '足球' ? 'football' : sport === '篮球' ? 'basketball' : ''))
+      .filter((sport): sport is string => sport.length > 0);
+    const strategyParams: Record<string, number> = {
+      initial_balance: initialBalance,
+      max_drawdown: retracement,
+      trade_amount: Math.max(1, parseFloat(addForm.maxSingleAmount) || 100),
     };
-
-    setAccounts(prev => [...prev, newAccount]);
+    if (addForm.strategy === 'prematch_gap_retracement') {
+      strategyParams.entry_spread_threshold = 0.25;
+    }
+    await createTrading({
+      strategy_name: addForm.strategy,
+      strategy_params: strategyParams,
+      affect_sports: affectSports,
+      mode: 'simulation',
+    }).then((created) => startTradingInstance(created.trading_id));
+    await loadTradingData();
     setShowAddDialog(false);
   };
 
-  const handleUpdateAccount = () => {
-    if (!currentAccountId) return;
-    setAccounts(prev => prev.map(a =>
-      a.id === currentAccountId
-        ? {
-            ...a,
-            strategyParams: { retracement: parseFloat(editForm.retracement) },
-            maxPositions: parseInt(editForm.maxPositions) || 0,
-            maxFundUsageRate: parseFloat(editForm.maxFundUsageRate) || 0,
-            maxSingleAmount: parseFloat(editForm.maxSingleAmount) || 0,
-          }
-        : a
-    ));
+  const handleUpdateAccount = async () => {
+    if (!currentAccountId || !currentAccount) {
+      return;
+    }
+    const nextStrategyParams: Record<string, number> = {
+      ...currentAccount.strategyConfig,
+    };
+    const retracement = (parseFloat(editForm.retracement) || currentAccount.strategyParams.retracement) / 100;
+    const maxSingleAmount =
+      Math.max(1, parseFloat(editForm.maxSingleAmount) || currentAccount.maxSingleAmount || Number(currentAccount.strategyConfig.trade_amount) || 100);
+    if (currentAccount.strategyKey === 'retracement') {
+      nextStrategyParams.retracement = retracement;
+    } else {
+      nextStrategyParams.max_drawdown = retracement;
+    }
+    nextStrategyParams.trade_amount = maxSingleAmount;
+    await updateTradingInstance(currentAccountId, {
+      strategy_params: nextStrategyParams,
+    });
+    await loadTradingData();
     setShowEditDialog(false);
+    setCurrentAccountId(null);
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (!currentAccountId) return;
-    setAccounts(prev => prev.filter(a => a.id !== currentAccountId));
+    await deleteTradingInstance(currentAccountId);
+    await loadTradingData();
     setShowDeleteDialog(false);
     setCurrentAccountId(null);
   };
 
-  const handleToggleAccount = (id: string) => {
-    setAccounts(prev => prev.map(a => a.id === id ? { ...a, isRunning: !a.isRunning } : a));
+  const handleToggleAccount = async (id: string) => {
+    await startTradingInstance(id);
+    await loadTradingData();
   };
 
   const handleOpenAddDialog = () => {
+    if (!isSimulation) {
+      return;
+    }
     setAddForm(defaultAddForm);
     setShowAddDialog(true);
   };
@@ -341,11 +361,10 @@ export const TradingPanel = () => {
     setShowEditDialog(true);
   };
 
-  const handleConfirmStop = () => {
+  const handleConfirmStop = async () => {
     if (currentAccountId) {
-      setAccounts(prev => prev.map(a =>
-        a.id === currentAccountId ? { ...a, isRunning: false } : a
-      ));
+      await stopTradingInstance(currentAccountId);
+      await loadTradingData();
     }
     setShowStopDialog(false);
     setCurrentAccountId(null);
@@ -366,9 +385,6 @@ export const TradingPanel = () => {
         : [...prev.sports, sport],
     }));
   };
-
-  const sportOptions    = ['足球', '篮球', '网球', '棒球', '冰球'];
-  const strategyOptions = ['首分买入，回撤卖出', '动量追踪策略', '均值回归策略'];
 
   const selectedPMAccount = PM_BUILDER_ACCOUNTS.find(p => p.id === addForm.pmAccountId);
   const currentAccount    = accounts.find(a => a.id === currentAccountId);
@@ -399,8 +415,12 @@ export const TradingPanel = () => {
             </div>
             <button
               onClick={handleOpenAddDialog}
-              className="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-gray-100 text-gray-500 hover:text-[#10b981]"
-              title="添加交易账户"
+              disabled={!isSimulation}
+              className={clsx(
+                "p-1.5 rounded-md transition-colors text-gray-500",
+                isSimulation ? "cursor-pointer hover:bg-gray-100 hover:text-[#10b981]" : "cursor-not-allowed opacity-40"
+              )}
+              title={isSimulation ? "添加交易账户" : "真实交易暂未开放"}
             >
               <Plus size={16} />
             </button>
@@ -614,7 +634,7 @@ export const TradingPanel = () => {
                       onChange={e => setAddForm(p => ({ ...p, strategy: e.target.value }))}
                       className="w-full border border-gray-200 bg-white rounded-md px-3 py-2 text-xs text-gray-900 focus:border-[#10b981] focus:outline-none cursor-pointer appearance-none pr-8"
                     >
-                      {strategyOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      {STRATEGY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                     <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   </div>
@@ -637,7 +657,7 @@ export const TradingPanel = () => {
                 <div>
                   <label className="text-xs text-gray-500 block mb-1.5">适用比赛</label>
                   <div className="flex flex-wrap gap-2">
-                    {sportOptions.map(sport => (
+                    {SPORT_OPTIONS.map(sport => (
                       <button
                         key={sport}
                         onClick={() => toggleSportAdd(sport)}
@@ -731,7 +751,7 @@ export const TradingPanel = () => {
                       onChange={e => setAddForm(p => ({ ...p, strategy: e.target.value }))}
                       className="w-full border border-gray-200 bg-white rounded-md px-3 py-2 text-xs text-gray-900 focus:border-[#10b981] focus:outline-none cursor-pointer appearance-none pr-8"
                     >
-                      {strategyOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      {STRATEGY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                     <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   </div>
@@ -754,7 +774,7 @@ export const TradingPanel = () => {
                 <div>
                   <label className="text-xs text-gray-500 block mb-1.5">适用比赛</label>
                   <div className="flex flex-wrap gap-2">
-                    {sportOptions.map(sport => (
+                    {SPORT_OPTIONS.map(sport => (
                       <button
                         key={sport}
                         onClick={() => toggleSportAdd(sport)}

@@ -39,6 +39,11 @@ class MarketPipeline:
                 ask=round(ask, 6),
                 volume=float(volume),
                 source="pm",
+                sport=match.sport.value.lower(),
+                status=match.status.value.lower(),
+                start_time_utc=match.start_time_utc,
+                score_home=match.score_home,
+                score_away=match.score_away,
             )
             if self._step % self._sample_every == 0:
                 self._sampled_ticks[match.match_id].append(tick)

@@ -21,12 +21,20 @@ describe("mapBackendAccountToTradingAccount", () => {
     const row = {
       id: "S001",
       mode: "simulation",
-      strategy_name: "首分买入，回撤卖出",
+      strategy_name: "live_first_goal_retracement",
       retracement: 0.05,
+      initial_balance: 1000.0,
+      affect_sports: ["football", "basketball"],
+      strategy_params: {
+        initial_balance: 1000.0,
+        max_drawdown: 0.05,
+        trade_amount: 150.0,
+      },
       total_assets: 1200.0,
       available_cash: 800.0,
       position_count: 2,
       is_running: true,
+      win_rate: 0.5,
     };
     const mapped = mapBackendAccountToTradingAccount(row as any);
     expect(mapped.id).toBe("S001");
@@ -34,6 +42,13 @@ describe("mapBackendAccountToTradingAccount", () => {
     expect(mapped.availableCash).toBe(800.0);
     expect(mapped.positionCount).toBe(2);
     expect(mapped.isRunning).toBe(true);
+    expect(mapped.initialBalance).toBe(1000.0);
+    expect(mapped.sports).toEqual(["足球", "篮球"]);
+    expect(mapped.winRate).toBe(50);
+    expect(mapped.strategyName).toBe("足球首球回撤");
+    expect(mapped.strategyKey).toBe("live_first_goal_retracement");
+    expect(mapped.maxSingleAmount).toBe(150);
+    expect(mapped.strategyConfig.trade_amount).toBe(150);
   });
 });
 

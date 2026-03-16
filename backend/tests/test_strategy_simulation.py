@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from app.domain.events import MarketTickEvent
 from app.execution.simulator import SimulationExecutor
+from app.strategy.registry import build_strategies
 from app.strategy.retracement import RetracementStrategy
 
 
@@ -52,6 +53,7 @@ def test_simulation_executor_updates_balance_and_positions() -> None:
         strategy_id="S001",
         action="buy",
         match_id="pm_football_001",
+        outcome="home",
         price=0.5,
         amount=100.0,
     )
@@ -63,9 +65,21 @@ def test_simulation_executor_updates_balance_and_positions() -> None:
         strategy_id="S001",
         action="sell",
         match_id="pm_football_001",
+        outcome="home",
         price=0.55,
         amount=100.0,
     )
     assert sell["status"] == "filled"
     assert simulator.balance > 1000.0
     assert len(simulator.positions) == 0
+
+
+def test_strategy_registry_builds_multiple_strategies() -> None:
+    strategies = build_strategies(
+        [
+            {"name": "prematch_gap_retracement", "strategy_id": "S001", "entry_spread_threshold": 0.25, "max_drawdown": 0.05, "trade_amount": 100},
+            {"name": "live_first_goal_retracement", "strategy_id": "S002", "max_drawdown": 0.05, "trade_amount": 80},
+        ]
+    )
+    assert len(strategies) == 2
+    assert [item.strategy_id for item in strategies] == ["S001", "S002"]

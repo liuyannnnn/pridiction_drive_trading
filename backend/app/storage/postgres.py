@@ -1,5 +1,6 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from app.config import settings
 
 
@@ -7,6 +8,7 @@ engine: AsyncEngine = create_async_engine(
     settings.postgres_dsn,
     echo=False,
     pool_pre_ping=True,
+    poolclass=NullPool,
 )
 
 AsyncSessionFactory = async_sessionmaker(

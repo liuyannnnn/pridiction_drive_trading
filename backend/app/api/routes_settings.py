@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from fastapi import APIRouter
 
+from app.config import settings
 from app.runtime.container import runtime
 
 
@@ -15,9 +16,26 @@ class CollectorSettingsRequest(BaseModel):
 
 @router.get("/settings/collector")
 async def get_collector_settings() -> dict:
+    try:
+        stored = await runtime.repository.get_collector_settings()
+    except Exception:
+        stored = None
+    if stored is not None:
+        runtime.update_collector_settings(stored)
     return runtime.get_collector_settings()
 
 
 @router.put("/settings/collector")
 async def put_collector_settings(body: CollectorSettingsRequest) -> dict:
-    return runtime.update_collector_settings(body.model_dump())
+    updated = runtime.update_collector_settings(body.model_dump())
+    try:
+        await runtime.repository.upsert_collector_settings(updated)
+    except Exception:
+        pass
+    if settings.external_stream_enabled and runtime._external_started:
+        try:
+            await runtime.stop_external_connectors()
+            await runtime.start_external_connectors()
+        except Exception:
+            pass
+    return updated
